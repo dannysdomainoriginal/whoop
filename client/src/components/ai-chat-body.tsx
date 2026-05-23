@@ -7,7 +7,7 @@ interface AIChatBodyProps {
   chatId: string;
 }
 
-export function AIChatBody({ chatId }: AIChatBodyProps) {
+export function AIChatBody({  }: AIChatBodyProps) {
   const { singleAIChat, isSingleAIChatLoading } = useAIChat();
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
