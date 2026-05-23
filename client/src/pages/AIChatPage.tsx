@@ -10,7 +10,7 @@ export function AIChatPage() {
   const { fetchSingleAIChat, singleAIChat } = useAIChat();
 
   useEffect(() => {
-    if (id) {
+    if (id && id !== "new") {
       fetchSingleAIChat(id);
     }
   }, [id, fetchSingleAIChat]);

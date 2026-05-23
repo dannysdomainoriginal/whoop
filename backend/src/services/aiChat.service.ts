@@ -1,16 +1,23 @@
+import { GoogleGenAI } from "@google/genai";
 import { Env } from "../config/env.config";
 import AIChatModel from "../models/aiChat.model";
 import AIChatMessageModel from "../models/aiChatMessage.model";
 
-let genAI: any = null;
+// Properly type the modern SDK client instance
+let ai: GoogleGenAI | null = null;
 
 try {
-  const { GoogleGenerativeAI } = require("@google/generative-ai");
-  genAI = new GoogleGenerativeAI(Env.GOOGLE_GEMINI_API_KEY);
+  // The modern SDK automatically picks up process.env.GEMINI_API_KEY.
+  // Since you are using a custom Env config object, we explicitly pass it here.
+  if (Env.GOOGLE_GEMINI_API_KEY) {
+    ai = new GoogleGenAI({ apiKey: Env.GOOGLE_GEMINI_API_KEY });
+  } else {
+    console.warn(
+      "GOOGLE_GEMINI_API_KEY is missing from environment configuration.",
+    );
+  }
 } catch (error) {
-  console.warn(
-    "Google Generative AI not initialized - install @google/generative-ai",
-  );
+  console.error("Failed to initialize Google GenAI SDK:", error);
 }
 
 export const createAIChatService = async (userId: string, title?: string) => {
@@ -62,41 +69,47 @@ export const sendAIMessageService = async (
   });
   await userMsg.save();
 
-  // Get conversation history
+  // Get conversation history (including the message we just saved)
   const history = await AIChatMessageModel.find({ aiChatId }).sort({
     createdAt: 1,
   });
 
-  // Generate AI response using Gemini
+  // Generate AI response using modern Gemini SDK
   let aiResponse = "";
   try {
-    if (!genAI) {
-      throw new Error("Google Generative AI not initialized");
+    if (!ai) {
+      throw new Error("Google GenAI not initialized or API key missing");
     }
 
-    const model = genAI.getGenerativeModel({ model: "gemini-pro" });
-
-    // Format conversation history for the model
+    // Format conversation history correctly for the new SDK ('user' or 'model')
     const conversationHistory = history.map((msg) => ({
       role: msg.role === "user" ? "user" : "model",
       parts: [{ text: msg.content }],
     }));
 
-    // Start chat session
-    const chat = model.startChat({
-      history: conversationHistory.slice(0, -1), // Exclude the last user message we just added
+    // In the modern SDK, chats are managed under ai.chats.create()
+    // We slice out the last message because we pass it directly to sendMessage() below
+    const chatSession = ai.chats.create({
+      model: "gemini-2.5-flash",
+      history: conversationHistory.slice(0, -1),
+      config: {
+        systemInstruction:
+          "You are a concise assistant. Provide accurate plain text answers. Say 'I don't know' if unsure. STRICT LIMITS: Absolute maximum 250 characters per response. NEVER use any markdown (no asterisks, hash marks, or code blocks). Output 100% plain text only. If possible add line breaks for clarity",
+      },
     });
 
     // Send the latest user message
-    const result = await chat.sendMessage(userMessage);
-    aiResponse = result.response.text();
+    const result = await chatSession.sendMessage({ message: userMessage });
+
+    // Fallback gracefully if response text isn't returned cleanly
+    aiResponse = result.text || "";
   } catch (error: any) {
     console.error("Gemini API Error:", error);
     aiResponse =
       "I apologize, but I encountered an error processing your message. Please try again.";
   }
 
-  // Save AI response
+  // Save AI response (Preserving your exact 'ai' schema role value)
   const aiMsg = new AIChatMessageModel({
     aiChatId,
     role: "ai",

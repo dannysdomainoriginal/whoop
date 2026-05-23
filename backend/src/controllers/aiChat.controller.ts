@@ -58,7 +58,10 @@ export const getSingleAIChatController = asyncHandler(
 export const sendAIMessageController = asyncHandler(
   async (req: Request, res: Response) => {
     const userId = req.user?._id;
-    const body = sendAIMessageSchema.parse(req.body);
+    const body = sendAIMessageSchema.parse({
+      ...req.body,
+      aiChatId: req.params.id
+    });
 
     const { userMessage, aiMessage } = await sendAIMessageService(
       body.aiChatId,
